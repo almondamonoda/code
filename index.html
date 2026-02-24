@@ -2651,7 +2651,7 @@ function showPanel(h){document.getElementById('pn').innerHTML=h;document.getElem
 function showMenu(){
   showPanel(
     '<div class="pt" style="color:#00ffe7;">BUBBLE WARS EX <span style="color:#ff2d55;font-size:.65em;">∞</span></div>'+
-    '<div class="ps">限界を超えろ</div>'+
+    '<div class="ps">面白さを超えろ・最強の面白さで限界を超えろ</div>'+
     '<div style="display:flex;justify-content:space-between;width:100%;font-size:8px;color:rgba(255,255,255,.28);">'+
       '<span>💎 '+GEM+'</span><span>🏆 '+HISCORE.toLocaleString()+'</span><span>💀 '+TOTALKILLS+'kills</span></div>'+
     '<div class="sp"></div>'+
@@ -2663,6 +2663,8 @@ function showMenu(){
       '<div><div>GOD GAME</div><div style="font-size:7px;opacity:.55;margin-top:1px;">激変モード：神罰・メテオ・常時ブースト</div></div></button>'+
     '<button class="btn c2" onclick="showDiff()"><span class="em">🤖</span>'+
       '<div><div>ボット対戦</div><div style="font-size:7px;opacity:.3;margin-top:1px;">AIと1vs1対決</div></div></button>'+
+    '<button class="btn" style="border-color:#60a5fa;color:#60a5fa;background:rgba(96,165,250,.1);" onclick="showOnlineDuel()"><span class="em">🌐</span>'+
+      '<div><div>ONLINE 2P DUEL β</div><div style="font-size:7px;opacity:.45;margin-top:1px;">ルームコードで2人対戦</div></div></button>'+
     '<button class="btn c2" onclick="startBossRush()"><span class="em">☠</span>'+
       '<div><div>BOSS RUSH ∞</div><div style="font-size:7px;opacity:.3;margin-top:1px;">連続ボス撃破モード</div></div></button>'+
     '<button class="btn c4" onclick="openShop()"><span class="em">⚙</span>'+
@@ -2686,6 +2688,109 @@ function showCtrl(){
     '<div class="tip">🖱 クリック / ドラッグ → 移動<br>右クリック / Shift → ダッシュ (無敵)<br>Z / Space → ボム (ゲージ満タン時)<br>X → ULTIMA (ULTI満タン時)<br>1〜5 / Q・E → 武器切替<br>SHOP → 永続アップグレード</div>'+
     '<div class="tip" style="border-color:rgba(192,132,252,.12);color:rgba(192,132,252,.5);margin-top:5px;">ウェーブクリア → 毎回3択強化カード！<br>💎ガチャでさらに強化 (60💎)<br>レベルアップで追加ボーナス<br>コンボ×10でライフ回復 / ×30でULTI充填</div>'+'<div class="tip" style="border-color:rgba(255,214,10,.12);color:rgba(255,214,10,.5);margin-top:5px;">【スキル】 S → アクティブスキル発動<br>A/D → スキル切替 | Tab → スキル選択<br>R → リベンジバースト (バー満タン時)<br>F → フィーバーモード (フィーバーバー満タン時)<br>V → OVERDRIVE (OD満タン時)<br>C → CHAOS OVERDRIVE (カオスバー満タン時)<br>🕳 BLACKHOLE / ⚡ LIGHTNING / 🪞 MIRROR / 🔥 BERSERK</div>'+
     '<button class="sb c" onclick="showMenu()">OK</button>');
+}
+
+
+// ── ONLINE 2P DUEL (WebRTC Manual Signaling) ──
+var od={pc:null,ch:null,isHost:false,connected:false,myHP:100,enemyHP:100,myEnergy:0,enemyEnergy:0,round:1,myMove:null,enemyMove:null};
+function odResetMatch(){od.myHP=100;od.enemyHP=100;od.myEnergy=0;od.enemyEnergy=0;od.round=1;od.myMove=null;od.enemyMove=null;}
+function odClose(){try{if(od.ch)od.ch.close();}catch(e){}try{if(od.pc)od.pc.close();}catch(e){}od.pc=null;od.ch=null;od.connected=false;od.isHost=false;odResetMatch();}
+function odBindChannel(ch){
+  od.ch=ch;
+  ch.onopen=function(){od.connected=true;addFloat(W/2,H*.2,'ONLINE CONNECTED','#60a5fa',1.1);showOnlineDuel();};
+  ch.onclose=function(){od.connected=false;showOnlineDuel();};
+  ch.onmessage=function(ev){
+    try{var d=JSON.parse(ev.data);}catch(_e){return;}
+    if(d.t==='move'){
+      if(od.isHost){od.enemyMove=d.move;odResolveIfReady();}
+      else{od.enemyMove=d.move;showOnlineDuel();}
+    }else if(d.t==='state'&&!od.isHost){
+      od.myHP=d.myHP;od.enemyHP=d.enemyHP;od.myEnergy=d.myEnergy;od.enemyEnergy=d.enemyEnergy;od.round=d.round;
+      od.myMove=null;od.enemyMove=d.enemyMove||null;
+      showOnlineDuel();
+    }else if(d.t==='sync'&&od.isHost){
+      od.myMove=d.move;odResolveIfReady();
+    }
+  };
+}
+function odSend(o){if(od.ch&&od.ch.readyState==='open')od.ch.send(JSON.stringify(o));}
+function odEnsurePC(){
+  if(od.pc)return od.pc;
+  od.pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  od.pc.oniceconnectionstatechange=function(){if(od.pc&&['disconnected','failed','closed'].indexOf(od.pc.iceConnectionState)>=0){od.connected=false;showOnlineDuel();}};
+  od.pc.ondatachannel=function(e){odBindChannel(e.channel);};
+  return od.pc;
+}
+async function odCreateRoom(){
+  odClose();od.isHost=true;odResetMatch();
+  var pc=odEnsurePC();
+  var ch=pc.createDataChannel('duel');odBindChannel(ch);
+  var offer=await pc.createOffer();await pc.setLocalDescription(offer);
+  await new Promise(function(res){if(pc.iceGatheringState==='complete')res();else pc.onicegatheringstatechange=function(){if(pc.iceGatheringState==='complete')res();};});
+  document.getElementById('odOffer').value=pc.localDescription.sdp;showOnlineDuel();
+}
+async function odJoinRoom(){
+  odClose();od.isHost=false;odResetMatch();
+  var offerTxt=document.getElementById('odJoinOffer').value.trim();if(!offerTxt){alert('ホストのOfferを貼り付けてください');return;}
+  var pc=odEnsurePC();
+  await pc.setRemoteDescription({type:'offer',sdp:offerTxt});
+  var ans=await pc.createAnswer();await pc.setLocalDescription(ans);
+  await new Promise(function(res){if(pc.iceGatheringState==='complete')res();else pc.onicegatheringstatechange=function(){if(pc.iceGatheringState==='complete')res();};});
+  document.getElementById('odAnswer').value=pc.localDescription.sdp;showOnlineDuel();
+}
+async function odApplyAnswer(){
+  if(!od.pc||!od.isHost)return;
+  var txt=document.getElementById('odHostAnswer').value.trim();if(!txt){alert('ゲストのAnswerを貼り付けてください');return;}
+  await od.pc.setRemoteDescription({type:'answer',sdp:txt});
+  showOnlineDuel();
+}
+function odChoose(move){
+  if(!od.connected)return;
+  od.myMove=move;
+  if(od.isHost){odResolveIfReady();}
+  else{odSend({t:'move',move:move});}
+  showOnlineDuel();
+}
+function odResolveIfReady(){
+  if(!od.isHost||!od.myMove||!od.enemyMove)return;
+  function dmg(att,def){if(att==='attack')return def==='guard'?6:18; if(att==='burst')return def==='guard'?12:32; return 0;}
+  var m1=od.myMove,m2=od.enemyMove;
+  if(m1==='charge')od.myEnergy=Math.min(3,od.myEnergy+1);
+  if(m2==='charge')od.enemyEnergy=Math.min(3,od.enemyEnergy+1);
+  if(m1==='burst'&&od.myEnergy<=0)m1='attack';
+  if(m2==='burst'&&od.enemyEnergy<=0)m2='attack';
+  if(m1==='burst')od.myEnergy=Math.max(0,od.myEnergy-1);
+  if(m2==='burst')od.enemyEnergy=Math.max(0,od.enemyEnergy-1);
+  od.enemyHP=Math.max(0,od.enemyHP-dmg(m1,m2));
+  od.myHP=Math.max(0,od.myHP-dmg(m2,m1));
+  od.round++;
+  odSend({t:'state',myHP:od.enemyHP,enemyHP:od.myHP,myEnergy:od.enemyEnergy,enemyEnergy:od.myEnergy,round:od.round,enemyMove:m1});
+  od.myMove=null;od.enemyMove=null;
+  if(od.myHP<=0||od.enemyHP<=0){addFloat(W/2,H*.25,od.myHP>od.enemyHP?'ONLINE WIN!':'ONLINE LOSE','#ffd60a',1.5);}
+}
+function showOnlineDuel(){
+  var st=od.connected?'CONNECTED':'NOT CONNECTED';
+  var hs=od.isHost?'HOST':'GUEST';
+  showPanel('<div class="pt" style="color:#60a5fa;">ONLINE 2P DUEL β</div>'+
+    '<div class="ps">WebRTC手動接続: Offer/Answerを共有して2人対戦</div>'+
+    '<div class="tip" style="font-size:7px;color:rgba(96,165,250,.7);">STATUS: '+st+' / '+hs+'</div>'+
+    '<div class="tip" style="font-size:7px;">YOU HP '+Math.floor(od.myHP)+' | ENEMY HP '+Math.floor(od.enemyHP)+'<br>ENERGY '+od.myEnergy+' / '+od.enemyEnergy+' | ROUND '+od.round+'</div>'+
+    (od.connected?
+      ('<div class="brow">'+
+        '<button class="sb c" onclick="odChoose(\'attack\')">ATTACK</button>'+
+        '<button class="sb y" onclick="odChoose(\'guard\')">GUARD</button>'+
+        '<button class="sb" style="border-color:#c084fc;color:#c084fc;" onclick="odChoose(\'charge\')">CHARGE</button>'+
+        '<button class="sb" style="border-color:#ff2d55;color:#ff2d55;" onclick="odChoose(\'burst\')">BURST(-1)</button>'+
+      '</div>'):
+      ('<button class="sb c" onclick="odCreateRoom()">ホストとしてルーム作成</button>'+
+       '<textarea id="odOffer" style="width:100%;height:58px;background:#050b1f;color:#9bd3ff;border:1px solid rgba(96,165,250,.35);font-size:7px;"></textarea>'+
+       '<textarea id="odHostAnswer" placeholder="ゲストAnswerをここへ貼付" style="width:100%;height:48px;background:#050b1f;color:#9bd3ff;border:1px solid rgba(96,165,250,.22);font-size:7px;"></textarea>'+
+       '<button class="sb" style="border-color:#60a5fa;color:#60a5fa;" onclick="odApplyAnswer()">ホスト接続確定</button>'+
+       '<div class="sp"></div>'+
+       '<textarea id="odJoinOffer" placeholder="ホストOfferをここへ貼付" style="width:100%;height:48px;background:#050b1f;color:#9bd3ff;border:1px solid rgba(96,165,250,.22);font-size:7px;"></textarea>'+
+       '<button class="sb y" onclick="odJoinRoom()">ゲストとして参加</button>'+
+       '<textarea id="odAnswer" style="width:100%;height:58px;background:#050b1f;color:#9bd3ff;border:1px solid rgba(96,165,250,.35);font-size:7px;"></textarea>'))+
+    '<div class="brow"><button class="sb r" onclick="odClose();showMenu();">戻る</button></div>');
 }
 function showResult(title,col){
   if(score>HISCORE){HISCORE=score;}saveAll();
