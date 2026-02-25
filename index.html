@@ -207,7 +207,7 @@ window.addEventListener('resize',resize);
 loadSkins();loadStreak();
 
 var funTag=document.getElementById('fun-tag');
-var funLines=['NEON CHAOS ONLINE','HYPER BUBBLE ALERT','GRAZE LIKE A NINJA','BOSS MELT PROTOCOL','ULTRA FEVER READY'];
+var funLines=['NEON CHAOS ONLINE','HYPER BUBBLE ALERT','GRAZE LIKE A NINJA','BOSS MELT PROTOCOL','ULTRA FEVER READY','面白さを超えてくれ MODE','遊び心オーバードライブ','ヤバさ無限大','テンション限界突破'];
 var extraFunElements=(function(){
   var moods=['HAPPY','WILD','FUNKY','LEGEND','INSANE','NINJA','CHAOS','GALAXY','DREAM','MEGA'];
   var actions=['GRAZE','DODGE','BURST','RUSH','COMBO','DANCE','CLUTCH','SNIPE','DRIFT','CRUSH'];
@@ -215,7 +215,7 @@ var extraFunElements=(function(){
   var twists=['BONUS','RITUAL','CARNIVAL','FESTIVAL','SHOWTIME','ROYALE','MADNESS','CIRCUIT','LAB','DIMENSION'];
   var rank=['N','R','SR','SSR','UR'];
   var list=[];
-  for(var i=0;i<300;i++){
+  for(var i=0;i<600;i++){
     var m=moods[i%moods.length];
     var a=actions[Math.floor(i/moods.length)%actions.length];
     var t=targets[Math.floor(i/(moods.length*actions.length))%targets.length];
@@ -596,7 +596,7 @@ var BOSSES=[
 ];
 
 // ── Game state ──
-var running=false,paused=false,gmode='single',bdiff='normal',retryFn=null;
+var running=false,paused=false,gmode='single',bdiff='normal',retryFn=null,activeExtraMode=-1;
 var racePlayerProg=0,raceRivalProg=0,raceGoal=9000,raceRivalBase=5.2,raceFinished=false;
 var raceLaneCenter=0,raceLaneWidth=0,raceSpeedFX=0,raceOffroad=0,raceWhooshCd=0;
 var carPlayerProg=0,carRivalProg=0,carGoal=12000,carRivalBase=6.4,carFinished=false,carTurbo=0;
@@ -1047,6 +1047,8 @@ function spawnWave(w){
   n=Math.min(34,Math.floor(n*contractMods.enemyCount));
   if(gmode==='arcade')n=Math.min(42,Math.floor(n*1.35)+1);
   if(gmode==='god')n=Math.min(54,Math.floor(n*1.7)+3);
+  var _xm=activeExtraMode>=0?EXTRA_MODES[activeExtraMode]:null;
+  if(_xm&&_xm.enemyMul)n=Math.min(60,Math.floor(n*_xm.enemyMul));
   var pool=w<3?['basic']:w<5?['basic','fast']:w<7?['basic','fast','tank']:
     w<10?['basic','fast','tank','bomber','sniper']:w<14?['basic','fast','tank','bomber','sniper','ghost','speeder','phantom2']:w<20?['basic','fast','tank','bomber','sniper','ghost','speeder','phantom2','berserker','mine']:Object.keys(ET);
   for(var i=0;i<n;i++){
@@ -1054,6 +1056,7 @@ function spawnWave(w){
     var _ws=1+Math.max(0,w-10)*.04;// wave10以降: 毎wave4%強化
     if(gmode==='arcade')_ws*=1.12;
     if(gmode==='god')_ws*=1.28;
+    if(_xm&&_xm.enemyMul)_ws*=Math.max(1,_xm.enemyMul*.92);
     enemies.push({type:tk,x:30+Math.random()*(W-60),y:18+Math.random()*(H*.38),
       vx:(Math.random()-.5)*t.spd*Math.min(_ws,2)*contractMods.enemySpd,vy:0,r:t.r,hp:Math.ceil(t.hp*_ws),maxHp:Math.ceil(t.hp*_ws),pts:Math.floor(t.pts*_ws),spd:t.spd*Math.min(_ws,1.8)*contractMods.enemySpd,
       srate:t.srate,bsp:t.bsp*contractMods.enemyBullet,col:t.col,em:t.em,beh:t.beh,alive:true,flash:0,
@@ -1108,6 +1111,12 @@ function spawnWave(w){
     if(Math.random()<.55)addEffect('clone',360);
     shields=Math.min(10,shields+2);
     addFloat(W/2,H*.14,'👑 GOD WAVE: OVERBLESSED','#c084fc',1.4);
+  }
+  if(_xm&&_xm.randomBuff){
+    var _rset=['rapid','chain','homing','magnet','slow','clone'];
+    var _rpick=_rset[Math.floor(Math.random()*_rset.length)];
+    addEffect(_rpick,360);
+    addFloat(W/2,H*.12,'🎡 ROULETTE: '+_rpick.toUpperCase(),_xm.col||'#f472b6',1.05);
   }
   checkUnlocks();document.getElementById('h-wv').textContent=w;
 }
@@ -2794,6 +2803,10 @@ function loop(t){
   updateKillStreak();
   updateGodMode();
   updatePlayer();
+  if(activeExtraMode>=0){
+    var _mx=EXTRA_MODES[activeExtraMode];
+    if(_mx&&_mx.regen&&fr%20===0&&pHP>0)pHP=Math.min(pMaxHP,pHP+_mx.regen);
+  }
   moveBullets(pBullets,true);moveBullets(eBullets,false);moveBullets(botBullets,false);
   if(gmode!=='bot'&&gmode!=='local2p'){updateEnemies();updateBoss();trySpawnElite();checkBossRage();tryWaveEvent();updateMagnet();
     if(!bossAlive&&!miniBossAlive&&wave>0&&wave%7===0&&fr%90===0&&Math.random()<.12){
@@ -2861,6 +2874,66 @@ function baseInit(){
   var ff=document.getElementById('feverfill');if(ff)ff.style.width='0%';
   var fl=document.getElementById('feverlbl');if(fl)fl.style.opacity='0';
   var _ge=document.getElementById('g');if(_ge)_ge.classList.remove('fever');
+  activeExtraMode=-1;
+}
+
+var EXTRA_MODES=[
+  {id:'glass',em:'🧊',name:'GLASS CANNON',desc:'火力特化・耐久最小',col:'#93c5fd',lives:1,hp:55,effects:[['rapid',420],['chain',300]]},
+  {id:'fortress',em:'🛡',name:'FORTRESS',desc:'耐久特化・鈍足重装',col:'#60a5fa',lives:6,hp:180,shields:5,speedMul:.82},
+  {id:'blitz',em:'⚡',name:'BLITZ DRIVE',desc:'超高速で駆け抜ける',col:'#22d3ee',speedMul:1.45,effects:[['rapid',520]]},
+  {id:'lucky',em:'🍀',name:'LUCK RAIN',desc:'💎報酬増量モード',col:'#84cc16',gemMul:2,effects:[['magnet',600]]},
+  {id:'inferno',em:'🔥',name:'INFERNO',desc:'開幕バーサーク状態',col:'#fb7185',effects:[['rage',420],['rapid',280]]},
+  {id:'sniper',em:'🎯',name:'SNIPER EDGE',desc:'高精度・高火力',col:'#facc15',effects:[['homing',520],['slow',260]]},
+  {id:'storm',em:'🌩',name:'STORM CALLER',desc:'雷撃の嵐を召喚',col:'#a78bfa',effects:[['chain',560],['slow',360]]},
+  {id:'vampire',em:'🩸',name:'VAMPIRE',desc:'ライフスティール強化',col:'#ef4444',hp:120,lifesteal:.18,effects:[['rapid',300]]},
+  {id:'mirror',em:'🪞',name:'MIRROR SHIELD',desc:'反射防御を維持',col:'#c4b5fd',effects:[['clone',520]],shields:2},
+  {id:'void',em:'🕳',name:'VOID CORE',desc:'ブラックホール重視',col:'#818cf8',effects:[['magnet',620],['slow',260]]},
+  {id:'dash',em:'💨',name:'DASH MASTER',desc:'回避性能を最大化',col:'#67e8f9',speedMul:1.25,dashMul:.45},
+  {id:'combo',em:'🎲',name:'COMBO FEVER',desc:'コンボ継続で火力上昇',col:'#f59e0b',effects:[['scorex3',600],['rapid',360]]},
+  {id:'eco',em:'♻️',name:'ECO RUN',desc:'武器制限サバイバル',col:'#86efac',singleWeapon:true,hp:90,lives:2},
+  {id:'samurai',em:'🗡',name:'SAMURAI',desc:'接近戦ボーナス',col:'#fb7185',speedMul:1.1,effects:[['rage',360],['rapid',280]]},
+  {id:'healer',em:'💚',name:'HEALER',desc:'毎秒回復モード',col:'#4ade80',hp:140,regen:.16,shields:1},
+  {id:'gravity',em:'🪐',name:'GRAVITY WELL',desc:'吸引フィールド常時展開',col:'#38bdf8',effects:[['magnet',620],['slow',420]]},
+  {id:'roulette',em:'🎡',name:'ROULETTE',desc:'毎WAVEランダム強化',col:'#f472b6',randomBuff:true},
+  {id:'merciless',em:'☠️',name:'MERCILESS',desc:'敵強化ハードコア',col:'#f43f5e',enemyMul:1.35,lives:2,hp:95},
+  {id:'timeatk',em:'⏱',name:'TIME ATTACK',desc:'短期決戦スコア競争',col:'#facc15',startWave:3,scoreMul:1.5},
+  {id:'ultimate',em:'👑',name:'ULTIMATE EX',desc:'全部盛りカオス',col:'#ffd60a',lives:5,hp:160,shields:4,speedMul:1.2,effects:[['rapid',520],['chain',520],['homing',520],['magnet',520]],scoreMul:2,gemMul:1.5}
+];
+
+function startExtraMode(idx){
+  var m=EXTRA_MODES[idx];if(!m)return;
+  SFX.sel();gmode='single';retryFn=function(){startExtraMode(idx);};
+  resize();baseInit();activeExtraMode=idx;
+  var wb=document.getElementById('wbar');if(wb)wb.style.display='flex';
+  var _vd=document.getElementById('vshud');if(_vd)_vd.style.display='none';
+  var sb2=document.getElementById('sbar');if(sb2)sb2.style.display='flex';
+  renderWbar();renderSkillBar();setVsNames('YOU','BOT');hideOv();
+  if(m.lives!=null)lives=m.lives;
+  if(m.hp!=null){pHP=pMaxHP=m.hp;}
+  if(m.shields!=null)shields=Math.max(shields,m.shields);
+  if(m.speedMul!=null)PSPD*=m.speedMul;
+  if(m.scoreMul!=null)scoreMult*=m.scoreMul;
+  if(m.gemMul!=null)relics.gemMul*=m.gemMul;
+  if(m.lifesteal!=null)relics.lifesteal+=m.lifesteal;
+  if(m.dashMul!=null)dashCool=Math.max(0,Math.floor(dashCool*m.dashMul));
+  if(m.singleWeapon){wUnlocked=[true,false,false,false,false,false,false,false];curWeapon=0;}
+  if(m.startWave!=null)wave=Math.max(1,m.startWave|0);
+  if(m.effects&&m.effects.length)m.effects.forEach(function(e){addEffect(e[0],e[1]);});
+  addFloat(W/2,H*.3,m.em+' '+m.name+' START! ',m.col||'#00ffe7',1.8);
+  spawnWave(wave);startBGM();raf=requestAnimationFrame(loop);
+}
+
+function showExtraModes(){
+  var h='<div class="pt" style="color:#00ffe7;">EXTRA MODES x20</div>'+
+    '<div class="ps">新モード20個：好きなのを選んで即プレイ</div>'+
+    '<div class="sp"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;">';
+  EXTRA_MODES.forEach(function(m,i){
+    h+='<button class="btn" style="width:100%;border-color:'+m.col+';color:'+m.col+';background:rgba(0,0,0,.18);padding:8px;" onclick="startExtraMode('+i+')">'+
+      '<span class="em">'+m.em+'</span><div><div>'+m.name+'</div><div style="font-size:7px;opacity:.5;margin-top:1px;">'+m.desc+'</div></div></button>';
+  });
+  h+='</div><div class="sp"></div><button class="sb r" onclick="showMenu()">← 戻る</button>';
+  showPanel(h);
 }
 
 function startSingle(){
@@ -3181,15 +3254,44 @@ function closeShop(){
 function hideOv(){var _o=document.getElementById('ov');_o.className='h';_o.style.display='';}
 function showPanel(h){document.getElementById('pn').innerHTML=h;document.getElementById('ov').className='';}
 
+function startFunSurge(){
+  SFX.sel();
+  var exPick=(EXTRA_MODES&&EXTRA_MODES.length)?Math.floor(Math.random()*EXTRA_MODES.length):-1;
+  var corePick=Math.random();
+  if(exPick>=0&&corePick<.55){
+    startExtraMode(exPick);
+  }else if(corePick<.7){
+    startArcade();
+  }else if(corePick<.84){
+    startGod();
+  }else if(corePick<.92){
+    startRace();
+  }else{
+    startBossRush();
+  }
+  if(!running)return;
+  addEffect('rapid',480);addEffect('chain',420);
+  if(Math.random()<.7)addEffect('homing',360);
+  shields=Math.min(10,shields+2);
+  addChaos(40);fever=Math.min(FMAX,fever+45);
+  scoreMult=Math.min(scoreMult+1,8);scoreMultTimer=Math.max(scoreMultTimer,900);
+  sf(0,255,231,.2);shake(11);
+  var vibes=['🎉 FUN SURGE!','💥 CHAOS PARTY!','🚀 HYPE MAX!','✨ JOY OVERDRIVE!'];
+  addFloat(W/2,H*.3,vibes[Math.floor(Math.random()*vibes.length)],'#00ffe7',2);
+  for(var i=0;i<20;i++)spawnParts(W*.2+Math.random()*W*.6,H*.2+Math.random()*H*.5,funPalette[i%funPalette.length],1+Math.floor(Math.random()*3));
+}
+
 function showMenu(){
   showPanel(
     '<div class="pt" style="color:#00ffe7;">BUBBLE WARS EX <span style="color:#ff2d55;font-size:.65em;">∞</span></div>'+
-    '<div class="ps">面白さを超えろ・最強の面白さで限界を超えろ</div>'+
+    '<div class="ps">面白さを超えてくれ・最強の面白さで限界を超えろ</div>'+
     '<div style="display:flex;justify-content:space-between;width:100%;font-size:8px;color:rgba(255,255,255,.28);">'+
       '<span>💎 '+GEM+'</span><span>🏆 '+HISCORE.toLocaleString()+'</span><span>💀 '+TOTALKILLS+'kills</span></div>'+
     '<div class="sp"></div>'+
     '<button class="btn c1" onclick="startSingle()"><span class="em">🚀</span>'+
       '<div><div>シングルプレイ</div><div style="font-size:7px;opacity:.3;margin-top:1px;">無限ウェーブ・ボス・ウェーブガチャ・レベルアップ</div></div></button>'+
+    '<button class="btn" style="border-color:#00ffe7;color:#00ffe7;background:rgba(0,255,231,.12);" onclick="startFunSurge()"><span class="em">🎉</span>'+
+      '<div><div>FUN SURGE</div><div style="font-size:7px;opacity:.55;margin-top:1px;">ランダム超強化で即お祭りモード</div></div></button>'+
     '<button class="btn" style="border-color:#22d3ee;color:#22d3ee;background:rgba(34,211,238,.08);" onclick="startRace()"><span class="em">🏁</span>'+
       '<div><div>RACE モード</div><div style="font-size:7px;opacity:.55;margin-top:1px;">狭いレールを爆速走行！風切り音と加速感で先に10,000到達</div></div></button>'+
     '<button class="btn" style="border-color:#38bdf8;color:#38bdf8;background:rgba(56,189,248,.08);" onclick="startCarMode()"><span class="em">🚗</span>'+
@@ -3203,6 +3305,8 @@ function showMenu(){
 
     '<button class="btn c2" onclick="startBossRush()"><span class="em">☠</span>'+
       '<div><div>BOSS RUSH ∞</div><div style="font-size:7px;opacity:.3;margin-top:1px;">連続ボス撃破モード</div></div></button>'+
+    '<button class="btn" style="border-color:#00ffe7;color:#00ffe7;background:rgba(0,255,231,.08);" onclick="showExtraModes()"><span class="em">🧪</span>'+
+      '<div><div>EXTRA MODES x20</div><div style="font-size:7px;opacity:.45;margin-top:1px;">新モード20個を一気に追加</div></div></button>'+
     '<button class="btn c4" onclick="openShop()"><span class="em">⚙</span>'+
       '<div><div>アップグレード</div><div style="font-size:7px;opacity:.3;margin-top:1px;">💎でステータス永続強化 (8種類)</div></div></button>'+
     '<button class="btn c3" onclick="cycleBGMStyle()"><span class="em">🎵</span>'+
