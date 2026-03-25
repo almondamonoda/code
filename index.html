@@ -650,6 +650,13 @@ function stopBGM(){bgmActive=false;clearTimeout(bgmT);bgmT=null;stopRaceAmbience
 var GEM=parseInt(lsGet('bwx_gem')||'0');
 var HISCORE=parseInt(lsGet('bwx_hi')||'0');
 var TOTALKILLS=parseInt(lsGet('bwx_kills')||'0');
+var CREATORCOIN=parseInt(lsGet('bwx_creator')||'0');
+var PASSXP=parseInt(lsGet('bwx_passxp')||'0');
+var PASSTIER=Math.max(1,parseInt(lsGet('bwx_passtier')||'1'));
+var VIPLEVEL=parseInt(lsGet('bwx_vip')||'0');
+var SPONSORLV=parseInt(lsGet('bwx_sponsor')||'0');
+var ADREWARD_DAY=lsGet('bwx_adday')||'';
+var ADREWARD_COUNT=parseInt(lsGet('bwx_adcount')||'0');
 var UPGRADES={
   speed: {lv:0,max:6,cost:[20,45,80,130,200,300],label:'SPEED',   col:'#00ffe7',desc:'移動速度 / ダッシュ強化'},
   fire:  {lv:0,max:6,cost:[20,45,80,130,200,300],label:'FIRE',    col:'#ff9500',desc:'連射速度UP'},
@@ -663,7 +670,39 @@ var UPGRADES={
   lucky: {lv:0,max:3,cost:[150,320,540],              label:'LUCKY',  col:'#86efac',desc:'敵撃破でGEM獲得率UP'},
 };
 function getU(k){return UPGRADES[k].lv;}
-function saveAll(){lsSet('bwx_gem',GEM);lsSet('bwx_hi',HISCORE);lsSet('bwx_kills',TOTALKILLS);saveSkins();}
+function saveAll(){
+  lsSet('bwx_gem',GEM);lsSet('bwx_hi',HISCORE);lsSet('bwx_kills',TOTALKILLS);
+  lsSet('bwx_creator',CREATORCOIN);lsSet('bwx_passxp',PASSXP);lsSet('bwx_passtier',PASSTIER);
+  lsSet('bwx_vip',VIPLEVEL);lsSet('bwx_sponsor',SPONSORLV);
+  lsSet('bwx_adday',ADREWARD_DAY);lsSet('bwx_adcount',ADREWARD_COUNT);
+  saveSkins();
+}
+function todayKey(){var d=new Date();return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0');}
+function passNeed(){return 140+PASSTIER*80;}
+function resetAdDaily(){var t=todayKey();if(ADREWARD_DAY!==t){ADREWARD_DAY=t;ADREWARD_COUNT=0;}}
+function addPassXP(n){
+  PASSXP+=Math.max(0,Math.floor(n));var up=0;
+  while(PASSXP>=passNeed()){
+    PASSXP-=passNeed();PASSTIER++;up++;
+    var gemBonus=35+PASSTIER*4+VIPLEVEL*8;
+    var ccBonus=1+(PASSTIER%5===0?1:0);
+    GEM+=gemBonus;CREATORCOIN+=ccBonus;
+    addFloat(W/2,H*.22,'🎫 PASS TIER '+PASSTIER+'! +'+gemBonus+'💎 +'+ccBonus+'CC','#ffd60a',1.25);
+  }
+  if(up>0)SFX.upg();
+  saveAll();
+}
+function grantMetaRunRewards(){
+  var scoreXP=Math.min(120,Math.floor(score/650));
+  var waveXP=Math.min(80,Math.max(0,wave-1)*4);
+  var comboXP=Math.min(70,Math.floor(maxCombo/2));
+  var xpGain=24+scoreXP+waveXP+comboXP+legendRunCompleted*8;
+  var gemGain=Math.floor((12+Math.max(0,wave-1)*2+Math.min(30,Math.floor(score/1800)))*(1+SPONSORLV*.1));
+  var ccGain=Math.max(1,Math.floor((wave>=6?1:0)+(score>=9000?1:0)+(legendRunCompleted>=2?1:0)+(VIPLEVEL>=2?1:0)));
+  GEM+=gemGain;CREATORCOIN+=ccGain;addPassXP(xpGain);
+  addFloat(W/2,H*.34,'📈 RUN BONUS +'+gemGain+'💎  +'+ccGain+'CC','#22d3ee',1.2);
+  saveAll();
+}
 
 // ── Gacha pool ──
 var GPOOL=[
@@ -3454,6 +3493,7 @@ function startLocalVS(){
 }
 function endSingle(){
   if(!running)return;running=false;stopBGM();cancelAnimationFrame(raf);SFX.lose();
+  grantMetaRunRewards();
   if(score>HISCORE)HISCORE=score;if(wave>parseInt(lsG('bwx_bw')||'0'))lsS('bwx_bw',wave);saveAll();showResult('GAME OVER','#ff2d55');
 }
 function endBattle(win){
@@ -3634,7 +3674,7 @@ function showShop(){
     '</div>'+
     '<div style="font-size:7px;color:rgba(255,255,255,.2);padding:0 0 4px 0;">'+u.desc+'</div>';
   });
-  h+='<div class="sp"></div><button class="sb r" onclick="closeShop()">閉じる</button>';
+  h+='<div class="sp"></div><div class="brow"><button class="sb y" onclick="showMonetizeLab()">💼 MONETIZE LAB</button><button class="sb r" onclick="closeShop()">閉じる</button></div>';
   showPanel(h);
 }
 function buyUpg(k){
@@ -3678,12 +3718,69 @@ function startFunSurge(){
   for(var i=0;i<20;i++)spawnParts(W*.2+Math.random()*W*.6,H*.2+Math.random()*H*.5,funPalette[i%funPalette.length],1+Math.floor(Math.random()*3));
 }
 
+function claimAdReward(){
+  resetAdDaily();
+  if(ADREWARD_COUNT>=3){showMonetizeLab('本日の広告報酬は上限です（3/3）');return;}
+  ADREWARD_COUNT++;
+  var gem=60+ADREWARD_COUNT*25+VIPLEVEL*20;
+  var px=40+ADREWARD_COUNT*12;
+  GEM+=gem;addPassXP(px);saveAll();SFX.gacha();
+  showMonetizeLab('広告ブースト成功: +'+gem+'💎 / PASS+'+px+'（'+ADREWARD_COUNT+'/3）');
+}
+function buyVipBoost(){
+  var cost=12+VIPLEVEL*8;
+  if(CREATORCOIN<cost){showMonetizeLab('CC不足: VIP '+cost+'CC 必要');return;}
+  CREATORCOIN-=cost;VIPLEVEL=Math.min(9,VIPLEVEL+1);saveAll();SFX.upg();
+  showMonetizeLab('VIP Lv'+VIPLEVEL+' 解放! GEM収益+ / 広告報酬強化');
+}
+function buySponsorDeal(){
+  var cost=420+SPONSORLV*180;
+  if(GEM<cost){showMonetizeLab('💎不足: スポンサー契約 '+cost+'💎');return;}
+  GEM-=cost;SPONSORLV=Math.min(10,SPONSORLV+1);saveAll();SFX.sel();
+  showMonetizeLab('スポンサー契約 Lv'+SPONSORLV+'! ラン報酬GEM倍率アップ');
+}
+function showSeasonPass(){
+  resetAdDaily();
+  var need=passNeed();
+  var p=Math.max(0,Math.min(100,PASSXP/need*100));
+  var h='<div class="pt" style="color:#facc15">SEASON PASS</div>'+
+    '<div class="ps">ランを回してティア上昇 → 収益化向けの継続導線を体験</div><div class="sp"></div>'+
+    '<div class="rr"><span class="rl">TIER</span><span class="rv">'+PASSTIER+'</span></div>'+
+    '<div class="rr"><span class="rl">XP</span><span class="rv">'+PASSXP+' / '+need+'</span></div>'+
+    '<div class="ubw" style="margin:6px 0;height:6px;"><div class="ubf" style="width:'+p+'%;background:linear-gradient(90deg,#facc15,#fb7185,#22d3ee)"></div></div>'+
+    '<div class="tip">次ティア報酬: +'+(35+PASSTIER*4+VIPLEVEL*8)+'💎 / +'+(1+(PASSTIER%5===0?1:0))+'CC</div>'+
+    '<div class="brow">'+
+      '<button class="sb y" onclick="claimAdReward()">📺 AD BOOST '+ADREWARD_COUNT+'/3</button>'+
+      '<button class="sb p" onclick="buyVipBoost()">👑 VIP+</button>'+
+      '<button class="sb c" onclick="showMonetizeLab()">← BACK</button>'+
+    '</div>';
+  showPanel(h);
+}
+function showMonetizeLab(msg){
+  resetAdDaily();
+  var h='<div class="pt" style="color:#22d3ee;">MONETIZE LAB</div>'+
+    '<div class="ps">収益化を見据えたライブ運営導線：広告・パス・スポンサー</div><div class="sp"></div>'+
+    '<div class="rr"><span class="rl">💎 GEM</span><span class="rv">'+GEM+'</span></div>'+
+    '<div class="rr"><span class="rl">🪙 CREATOR COIN</span><span class="rv">'+CREATORCOIN+'</span></div>'+
+    '<div class="rr"><span class="rl">👑 VIP LEVEL</span><span class="rv">'+VIPLEVEL+'</span></div>'+
+    '<div class="rr"><span class="rl">🤝 SPONSOR</span><span class="rv">Lv'+SPONSORLV+'</span></div>'+
+    '<div class="rr"><span class="rl">🎫 PASS</span><span class="rv">Tier '+PASSTIER+'</span></div>'+
+    (msg?'<div class="tip" style="margin-top:6px;color:rgba(34,211,238,.7)">'+msg+'</div>':'')+
+    '<div class="sp"></div>'+
+    '<button class="btn" style="border-color:#facc15;color:#facc15;" onclick="showSeasonPass()"><span class="em">🎫</span><div><div>SEASON PASS</div><div style="font-size:7px;opacity:.45;margin-top:1px;">長期継続 & LTVを高める進行ループ</div></div></button>'+
+    '<button class="btn" style="border-color:#22d3ee;color:#22d3ee;" onclick="claimAdReward()"><span class="em">📺</span><div><div>広告報酬を受け取る</div><div style="font-size:7px;opacity:.45;margin-top:1px;">1日3回まで。短セッションでも復帰動機を作る</div></div></button>'+
+    '<button class="btn" style="border-color:#c084fc;color:#c084fc;" onclick="buyVipBoost()"><span class="em">👑</span><div><div>VIPブースト購入</div><div style="font-size:7px;opacity:.45;margin-top:1px;">'+(12+VIPLEVEL*8)+'CCでVIP+1</div></div></button>'+
+    '<button class="btn" style="border-color:#fb7185;color:#fb7185;" onclick="buySponsorDeal()"><span class="em">🤝</span><div><div>スポンサー契約</div><div style="font-size:7px;opacity:.45;margin-top:1px;">'+(420+SPONSORLV*180)+'💎でラン報酬倍率+10%</div></div></button>'+
+    '<button class="sb r" onclick="showMenu()">← 戻る</button>';
+  showPanel(h);
+}
+
 function showMenu(){
   showPanel(
     '<div class="pt" style="color:#00ffe7;">BUBBLE WARS EX <span style="color:#ff2d55;font-size:.65em;">∞</span></div>'+
     '<div class="ps">面白さを超えてくれ・最強の面白さで限界を超えろ</div>'+
     '<div style="display:flex;justify-content:space-between;width:100%;font-size:8px;color:rgba(255,255,255,.28);">'+
-      '<span>💎 '+GEM+'</span><span>🏆 '+HISCORE.toLocaleString()+'</span><span>👑 RANK '+legendRank+'</span><span>💀 '+TOTALKILLS+'kills</span></div>'+
+      '<span>💎 '+GEM+'</span><span>🪙 '+CREATORCOIN+'</span><span>🏆 '+HISCORE.toLocaleString()+'</span><span>👑 RANK '+legendRank+'</span><span>💀 '+TOTALKILLS+'kills</span></div>'+
     '<div class="sp"></div>'+
     '<button class="btn c1" onclick="startSingle()"><span class="em">🚀</span>'+
       '<div><div>シングルプレイ</div><div style="font-size:7px;opacity:.3;margin-top:1px;">無限ウェーブ・ボス・ウェーブガチャ・レベルアップ</div></div></button>'+
@@ -3706,6 +3803,8 @@ function showMenu(){
       '<div><div>EXTRA MODES x20</div><div style="font-size:7px;opacity:.45;margin-top:1px;">新モード20個を一気に追加</div></div></button>'+
     '<button class="btn c4" onclick="openShop()"><span class="em">⚙</span>'+
       '<div><div>アップグレード</div><div style="font-size:7px;opacity:.3;margin-top:1px;">💎でステータス永続強化 (8種類)</div></div></button>'+
+    '<button class="btn" style="border-color:#22d3ee;color:#22d3ee;background:rgba(34,211,238,.08);" onclick="showMonetizeLab()"><span class="em">💼</span>'+
+      '<div><div>MONETIZE LAB</div><div style="font-size:7px;opacity:.45;margin-top:1px;">広告・パス・VIP・スポンサー運営導線</div></div></button>'+
     '<button class="btn c3" onclick="cycleBGMStyle()"><span class="em">🎵</span>'+
       '<div><div>'+bgmStyleLabel()+'</div><div style="font-size:7px;opacity:.35;margin-top:1px;">BGMスタイル切替</div></div></button>'+
     '<button class="btn" style="border-color:#ffd60a;color:#ffd60a;background:rgba(255,214,10,.06);" onclick="showHangar()">'+'<span class="em">'+(SKINS[curSkin]?SKINS[curSkin].em:'🚀')+'</span>'+'<div><div>HANGAR</div><div style="font-size:7px;opacity:.4;margin-top:1px;">機体スキン ('+Object.keys(unlockedSkins).length+'/'+SKINS.length+'解放)</div></div></button>'+'<button class="btn cg" onclick="showCtrl()"><span class="em">🎮</span><div>操作方法</div></button>'
