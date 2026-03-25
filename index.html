@@ -116,6 +116,23 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:'Or
 .sk{flex:1;border:1.5px solid;padding:3px 2px;text-align:center;cursor:pointer;font-size:7px;font-family:Orbitron,monospace;letter-spacing:1px;position:relative;overflow:hidden;transition:all .1s;}
 .sk:hover{filter:brightness(1.4);}
 .g-wrap,.fever{/* fever pulse handled in JS */}
+#legendbar{width:100%;max-width:580px;display:flex;gap:6px;padding:4px 6px;background:rgba(3,6,20,.96);border-bottom:1px solid rgba(255,214,10,.08);flex-shrink:0;align-items:stretch;}
+.legend-chip{min-width:104px;border:1px solid rgba(255,214,10,.16);background:rgba(255,214,10,.05);padding:5px 6px;}
+.legend-chip .ttl{font-size:7px;letter-spacing:2px;color:#ffd60a;opacity:.8;}
+.legend-chip .sub{font-size:7px;letter-spacing:1px;color:rgba(255,255,255,.42);margin-top:2px;}
+.legend-list{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;}
+.legend-card{border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);padding:4px 5px;min-height:44px;transition:all .16s ease;}
+.legend-card.done{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.08);box-shadow:0 0 14px rgba(34,197,94,.12) inset;}
+.legend-card .name{font-size:7px;letter-spacing:1px;color:#fff;}
+.legend-card .meta{font-size:6px;line-height:1.5;color:rgba(255,255,255,.46);margin-top:2px;}
+.legend-card .bar{margin-top:3px;height:3px;background:rgba(255,255,255,.08);overflow:hidden;}
+.legend-card .fill{height:100%;background:linear-gradient(90deg,#ffd60a,#00ffe7);width:0%;transition:width .2s;}
+.legend-card.done .fill{background:linear-gradient(90deg,#22c55e,#86efac);}
+.legend-style{margin-top:4px;height:4px;background:rgba(255,255,255,.08);overflow:hidden;border-radius:999px;}
+.legend-style-fill{height:100%;width:0;background:linear-gradient(90deg,#22c55e,#00ffe7,#ffd60a,#ff2d55);transition:width .15s;}
+.legend-style-row{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:3px;font-size:7px;color:rgba(255,255,255,.55);}
+.legend-style-rank{font-size:11px;color:#ffd60a;text-shadow:0 0 10px currentColor;}
+@media (max-width:520px){#legendbar{display:block;padding:4px 5px;} .legend-chip{margin-bottom:4px;} .legend-list{grid-template-columns:1fr;}}
 @keyframes spinAura{to{transform:rotate(360deg);}}
 @keyframes orbFloat{from{transform:translate3d(0,0,0) scale(1);}to{transform:translate3d(18px,-20px,0) scale(1.15);}}
 @keyframes glitchBlink{0%,100%{opacity:.95;transform:translate(0,0);}20%{opacity:.65;transform:translate(1px,-1px);}21%{transform:translate(-1px,1px);}55%{opacity:1;}70%{opacity:.7;}}
@@ -158,6 +175,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:'Or
   </div>
   <div id="xpbar" style="width:100%;max-width:580px;height:2px;background:rgba(192,132,252,.1);flex-shrink:0;"><div id="xpfill" style="height:100%;background:#c084fc;transition:width .2s;width:0%"></div></div>
   <div id="wbar"></div>
+  <div id="legendbar"><div class="legend-chip" id="legendmeta"></div><div class="legend-list" id="legendlist"></div></div>
   <div id="sbar" style="width:100%;max-width:580px;display:none;gap:3px;padding:2px 6px;background:rgba(0,1,12,.99);border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;align-items:center;"></div>
   <div id="vshud" style="display:none;width:100%;max-width:580px;padding:2px 6px;background:rgba(0,1,12,.99);border-bottom:1px solid rgba(255,45,85,.1);flex-shrink:0;align-items:center;gap:4px;">
   <span id="pname" style="font-size:7px;color:#00ffe7;font-family:Orbitron,monospace;">YOU</span>
@@ -831,6 +849,13 @@ var shields=0;
 var maxCombo=0;
 var scoreMult=1;
 var TOTALKILLS=parseInt(lsG('bwx_kills')||'0');
+var LEGENDXP=parseInt(lsG('bwx_legendxp')||'0');
+var legendRank=Math.max(1,parseInt(lsG('bwx_legendrank')||'1'));
+var legendCompleted=parseInt(lsG('bwx_legenddone')||'0');
+var legendRunCompleted=0,legendRunReward=0;
+var legendMissions=[];
+var stylePts=0,styleTier='D',styleBoostTimer=0;
+
 var revengeMeter=0,revengeFull=false;
 function shake(n){shakeAmt=Math.max(shakeAmt,n);}
 function ring(x,y,col,maxR,lw){rings.push({x:x,y:y,col:col,r:4,maxR:maxR||60,spd:3.5,life:1,lw:lw||2});}
@@ -951,6 +976,7 @@ function addCombo(){
     comboCrateStep=_crateStep;
     spawnComboCrate();
   }
+  addStyle(combo>30?7:combo>15?5:3, combo>15?'STYLE COMBO!':'', '#ffd60a');
   if(combo===5){addFloat(px,py,'x5 COMBO!','#ffd60a',1.3);SFX.chain();}
   if(combo===20){GEM+=3;saveAll();addFloat(px,py-20,'COMBO 20! +3💎','#ffd60a',1.4);}
   if(combo===15&&!hyperMode)activateHyper();
@@ -960,6 +986,7 @@ function addCombo(){
     if(lives<8){lives++;hud();}}
   if(combo===20){addFloat(px,py,'x20 GODLIKE!','#ffd60a',2);sf(255,214,10,.25);}
   if(combo===30){addFloat(px,py,'x30 ∞ VOID MODE','#fff',2.2);sf(255,255,255,.35);ucharge=UMAX;}
+  legendPulse();
 }
 function spawnComboCrate(){
   var cx=Math.max(28,Math.min(W-28,px+(Math.random()-.5)*220));
@@ -996,7 +1023,7 @@ function nukeAll(){
 }
 function doUlti(){
   if(!running||paused||ucharge<UMAX)return;
-  ucharge=0;SFX.ulti();sf(255,255,255,.5);shake(18);
+  ucharge=0;SFX.ulti();sf(255,255,255,.5);shake(18);addStyle(18,'ULTIMA BURST!','#ffd60a');
   // Massive screen-clearing burst
   for(var i=0;i<20;i++){var a=i*Math.PI*.1;
     pBullets.push(mkB(px,py,a,14,'#ffd60a',8,dmg()*6,true));}
@@ -1053,6 +1080,112 @@ function endChaos(){
   if(running&&!paused)startBGM();
 }
 
+
+
+function styleTierInfo(){
+  if(stylePts>=340)return {rank:'SSS',mul:2.4,col:'#ff2d55'};
+  if(stylePts>=270)return {rank:'SS',mul:2.05,col:'#ffd60a'};
+  if(stylePts>=210)return {rank:'S',mul:1.8,col:'#00ffe7'};
+  if(stylePts>=150)return {rank:'A',mul:1.5,col:'#22c55e'};
+  if(stylePts>=95)return {rank:'B',mul:1.25,col:'#60a5fa'};
+  if(stylePts>=45)return {rank:'C',mul:1.1,col:'#c084fc'};
+  return {rank:'D',mul:1,col:'#94a3b8'};
+}
+function addStyle(n,label,col){
+  stylePts=Math.min(360,stylePts+n);
+  var prev=styleTier; var info=styleTierInfo(); styleTier=info.rank;
+  styleBoostTimer=Math.max(styleBoostTimer, styleTier==='SSS'?360:styleTier==='SS'?260:styleTier==='S'?180:0);
+  if(prev!==styleTier&&styleTier!=='D'){
+    addFloat(W/2,H*.16,'STYLE '+styleTier+'!',info.col,1.2);
+    sf(255,214,10,.08); shake(styleTier==='SSS'?8:4);
+  }else if(label&&n>=10){
+    addFloat(px,py-22,label,col||info.col,.9);
+  }
+  renderLegendUI();
+}
+function dropStyle(n){stylePts=Math.max(0,stylePts-n);styleTier=styleTierInfo().rank;renderLegendUI();}
+function updateStyleSystem(){
+  stylePts=Math.max(0,stylePts-(styleBoostTimer>0?.02:.045));
+  if(styleBoostTimer>0)styleBoostTimer--;
+  var info=styleTierInfo(); styleTier=info.rank;
+  if(styleTier==='S'&&fr%75===0){addEffect('rapid',50);}
+  if(styleTier==='SS'&&fr%60===0){addEffect('chain',36);score+=8;}
+  if(styleTier==='SSS'&&fr%45===0){addEffect('homing',30);addChaos(.6);score+=16;}
+}
+
+function saveLegend(){lsS('bwx_legendxp',LEGENDXP);lsS('bwx_legendrank',legendRank);lsS('bwx_legenddone',legendCompleted);}
+function legendNeed(){return 120+legendRank*90;}
+function addLegendXP(n){
+  if(!n)return;
+  LEGENDXP+=n;
+  var gained=false;
+  while(LEGENDXP>=legendNeed()){
+    LEGENDXP-=legendNeed();
+    legendRank++;
+    gained=true;
+    GEM+=30+legendRank*4;
+    addFloat(W/2,H*.18,'👑 LEGEND RANK '+legendRank+'  GEM BONUS!','#ffd60a',1.4);
+    SFX.lvup&&SFX.lvup();
+  }
+  if(gained)saveAll();
+  saveLegend();
+  renderLegendUI();
+}
+function buildLegendMissionPool(){
+  return [
+    {id:'combo',name:'COMBO SURGE',desc:'コンボをつなげろ',goal:18+legendRank*2,reward:18+legendRank*3,color:'#ffd60a',track:function(){return maxCombo;}},
+    {id:'graze',name:'NEAR MISS',desc:'グレイズ職人',goal:14+legendRank*2,reward:18+legendRank*3,color:'#00ffe7',track:function(){return grazeCount;}},
+    {id:'kills',name:'HUNTER',desc:'敵を撃破',goal:24+legendRank*5,reward:22+legendRank*3,color:'#ff2d55',track:function(){return Math.max(0,TOTALKILLS-(legendRunStartKills||0));}},
+    {id:'score',name:'SCORE BURST',desc:'スコアを稼げ',goal:1800+legendRank*900,reward:24+legendRank*4,color:'#c084fc',track:function(){return Math.max(0,score-(legendRunStartScore||0));}},
+    {id:'wave',name:'WAVE BREAK',desc:'波を超えろ',goal:2+Math.floor(legendRank/2),reward:26+legendRank*4,color:'#60a5fa',track:function(){return Math.max(0,(wave-1)-(legendRunStartWave||0));}},
+    {id:'boss',name:'BOSS MELTER',desc:'ボス撃破',goal:1,reward:35+legendRank*5,color:'#fb7185',track:function(){return legendBossKills||0;}}
+  ];
+}
+var legendRunStartKills=0,legendRunStartScore=0,legendRunStartWave=0,legendBossKills=0;
+function initLegendMissions(){
+  legendRunCompleted=0;legendRunReward=0;legendBossKills=0;
+  legendRunStartKills=TOTALKILLS;legendRunStartScore=score;legendRunStartWave=Math.max(0,wave-1);
+  var pool=buildLegendMissionPool(), used={}, picks=[];
+  while(picks.length<3&&picks.length<pool.length){
+    var idx=Math.floor(Math.random()*pool.length);
+    if(used[idx])continue; used[idx]=true;
+    var m=pool[idx];
+    picks.push({id:m.id,name:m.name,desc:m.desc,goal:m.goal,reward:m.reward,color:m.color,track:m.track,progress:0,done:false,claimed:false});
+  }
+  legendMissions=picks;
+  renderLegendUI();
+}
+function renderLegendUI(){
+  var meta=document.getElementById('legendmeta'), list=document.getElementById('legendlist');
+  if(!meta||!list)return;
+  var sinfo=styleTierInfo();
+  meta.innerHTML='<div class="ttl">LEGEND RANK '+legendRank+'</div>'+
+    '<div class="sub">XP '+LEGENDXP+' / '+legendNeed()+'<br>RUN CLEAR '+legendRunCompleted+'/3 ・ BONUS 💎'+legendRunReward+'</div>'+
+    '<div class="legend-style-row"><span>STYLE DRIVE</span><span class="legend-style-rank" style="color:'+sinfo.col+'">'+styleTier+'</span></div>'+
+    '<div class="legend-style"><div class="legend-style-fill" style="width:'+(stylePts/360*100)+'%"></div></div>'+
+    '<div class="sub" style="margin-top:3px;">'+(styleBoostTimer>0?'HYPE ACTIVE':'Build combo / graze / boss melt')+'</div>';
+  list.innerHTML=legendMissions.map(function(m){
+    var prog=Math.min(m.goal,m.progress||0), pct=Math.max(0,Math.min(100,prog/Math.max(1,m.goal)*100));
+    return '<div class="legend-card'+(m.done?' done':'')+'" style="border-color:'+(m.done?'rgba(34,197,94,.4)':'rgba(255,255,255,.08)')+'">'+
+      '<div class="name" style="color:'+(m.done?'#86efac':m.color)+'">'+(m.done?'✓ ':'')+m.name+'</div>'+
+      '<div class="meta">'+m.desc+'<br>'+prog+' / '+m.goal+' ・ REWARD '+m.reward+'XP</div>'+
+      '<div class="bar"><div class="fill" style="width:'+pct+'%"></div></div></div>';
+  }).join('');
+}
+function refreshLegendProgress(){
+  for(var i=0;i<legendMissions.length;i++){
+    var m=legendMissions[i], next=m.track?m.track():0;
+    m.progress=Math.min(m.goal,Math.floor(next));
+    if(!m.done&&m.progress>=m.goal){
+      m.done=true;m.claimed=true;legendRunCompleted++;legendRunReward+=m.reward;legendCompleted++;addLegendXP(m.reward);
+      addFloat(W/2,H*.22,'★ '+m.name+' COMPLETE! +'+m.reward+'XP',m.color,1.25);SFX.upg&&SFX.upg();
+      GEM+=8+Math.floor(m.reward/8);saveAll();
+    }
+  }
+  renderLegendUI();
+}
+function legendPulse(){refreshLegendProgress();}
+
 function hud(){
   document.getElementById('h-sc').textContent=score.toLocaleString();
   document.getElementById('h-wv').textContent=bossAlive?'BOSS':wave;
@@ -1068,7 +1201,7 @@ function onGraze(){
   score+=bonus*scoreMult;
   bcharge=Math.min(BMAX,bcharge+2);
   ucharge=Math.min(UMAX,ucharge+1);
-  addFever(2);addChaos(1.5);addPartyEnergy(1.2);
+  addFever(2);addChaos(1.5);addPartyEnergy(1.2);addStyle(4,'GRAZE','#00ffe7');
   if(grazeChain%8===0){
     GEM+=2;saveAll();
     addFloat(px,py-18,'NEAR MISS x'+grazeChain+' +2💎','#ffd60a',1.1);
@@ -1077,6 +1210,7 @@ function onGraze(){
     addFloat(px,py-12,'GRAZE x'+grazeChain,'#00ffe7',.95);
   }
   hud();
+  legendPulse();
 }
 
 // ── Input ──
@@ -1218,9 +1352,9 @@ function doBomb(){
       var _bmdx=e.x-px,_bmdy=e.y-py;if(_bmdx*_bmdx+_bmdy*_bmdy<rad*rad){
         e.hp-=dmg2;if(e.hp<=0){e.alive=false;var pts=e.pts*(effects.scorex3>0?3:1);score+=pts;onKill();spawnParts(e.x,e.y,e.col,8);addCombo();}}}
     for(var _bbl=eBullets.length-1;_bbl>=0;_bbl--){var _bb=eBullets[_bbl];var _bbdx=_bb.x-px,_bbdy=_bb.y-py;if(_bbdx*_bbdx+_bbdy*_bbdy<rad*rad){eBullets.splice(_bbl,1);}}
-    addFloat(px,py,'💥 BOMB!','#ffd60a',1.4);
+    addFloat(px,py,'💥 BOMB!','#ffd60a',1.4);dropStyle(24);
   } else {eHP=Math.max(0,eHP-42);vsHud();addFloat(botX,botY,'-42','#ffd60a',1.2);if(eHP<=0){endBattle(true);return;}}
-  spawnParts(px,py,'#ffd60a',14);spawnRing(px,py,'#ffd60a',rad,3);hud();
+  spawnParts(px,py,'#ffd60a',14);spawnRing(px,py,'#ffd60a',rad,3);hud();legendPulse();
 }
 
 // ── Enemy spawning ──
@@ -1386,11 +1520,13 @@ function killBoss(){
   powerups.push({x:bossX,y:bossY+30,r:13,bob:Math.PI/2,type:'ulti'});
   hud();
   if(wave===26&&!unlockedSkins.void){unlockedSkins.void=true;saveSkins();addFloat(W/2,H*.28,'VOID UNLOCKED!! 🌀','#c084fc',2.5);}
+  legendBossKills++;addStyle(34,'BOSS BREAK!','#ff2d55');legendPulse();
   setTimeout(function(){if(!running)return;hud();SFX.wave();showWaveGacha();},1500);
 }
 
 // ── Update player ──
 function updatePlayer(){
+  updateStyleSystem();
   if(iframes>0)iframes--;
   if(dashCool>0)dashCool--;
   // Update effects
@@ -1941,7 +2077,7 @@ function collide(){
           if(dmgAmt===0){iframes=40;eBullets.splice(i,1);break;}
           lives-=dmgAmt;iframes=80;eBullets.splice(i,1);waveHitCount++;
           spawnParts(px,py,'#00ffe7',16);SFX.die();shake(10);
-          revengeMeter=Math.min(100,revengeMeter+35);if(revengeMeter>=100&&!revengeFull){revengeFull=true;addFloat(px,py,'👊 REVENGE!','#ff2d55',1.5);if(SFX.revenge)SFX.revenge();}sf(255,0,50,.3);
+          revengeMeter=Math.min(100,revengeMeter+35);if(revengeMeter>=100&&!revengeFull){revengeFull=true;addFloat(px,py,'👊 REVENGE!','#ff2d55',1.5);if(SFX.revenge)SFX.revenge();}sf(255,0,50,.3);dropStyle(58);
           hud();addFloat(px,py,b.boss?'BOSS HIT!!':'HIT!','#ff2d55',b.boss?1.6:1.1);
           if(lives<=0){endSingle();return;}break;
         }
@@ -2890,6 +3026,8 @@ function applyWaveEvent(){
   running=true;
 }
 function onKill(){
+  legendPulse();
+  addStyle(killStreakCount>=20?9:6,'', '#ff2d55');
   killStreakT=360;// 6秒
   killStreakCount++;
   // STORM GAUGE
@@ -3113,10 +3251,11 @@ function baseInit(){
   racePlayerProg=0;raceRivalProg=0;raceFinished=false;raceWhooshCd=0;stopRaceAmbience();
   carPlayerProg=0;carRivalProg=0;carFinished=false;carTurbo=0;
   p2Input={up:false,down:false,left:false,right:false,shoot:false};
-  partyMode=false;partyEnergy=0;partyPulse=0;partyBurst=0;partySparks=[];partyChain=0;partyMsg='';partyMsgT=0;partyQuest=null;partyQuestCd=300;partyMut={id:'none',t:0,spd:1,dmg:1,hpDrain:0,col:'#ffd60a',label:''};partyPhase={id:'none',t:0,col:'#ffd60a',label:'',pow:0};partyUltra={id:'none',t:0,col:'#fff',label:'',pow:1};
+  partyMode=false;partyEnergy=0;partyPulse=0;partyBurst=0;partySparks=[];partyChain=0;partyMsg='';partyMsgT=0;partyQuest=null;partyQuestCd=300;partyMut={id:'none',t:0,spd:1,dmg:1,hpDrain:0,col:'#ffd60a',label:''};partyPhase={id:'none',t:0,col:'#ffd60a',label:'',pow:0};partyUltra={id:'none',t:0,col:'#fff',label:'',pow:1};stylePts=0;styleTier='D';styleBoostTimer=0;renderLegendUI();
   var ge=document.getElementById('g');if(ge)ge.classList.remove('party-mode');
   document.getElementById('xpfill').style.width='0%';
   document.getElementById('h-lv').textContent='1';
+  initLegendMissions();
   hud();running=true;paused=false;
   if(SKINS[curSkin]&&SKINS[curSkin].id==='mech')shields=Math.min(5,shields+1);
   scoreMult=1;scoreMultTimer=0;bossRaged=false;eliteSpawnT=200;
@@ -3475,7 +3614,7 @@ function doGacha(){
     '</div>'
   );
 }
-function continueWave(){waveClearing=false;waveHitCount=0;if(nextContract){setContract(nextContract);nextContract=null;}if(relics.shieldWave>0){shields=Math.min(9,shields+relics.shieldWave);addFloat(px,py-20,'RELIC SHIELD +'+relics.shieldWave,'#60a5fa',1.1);}hideOv();paused=false;startBGM();spawnWave(wave);raf=requestAnimationFrame(loop);}
+function continueWave(){waveClearing=false;waveHitCount=0;if(nextContract){setContract(nextContract);nextContract=null;}if(relics.shieldWave>0){shields=Math.min(9,shields+relics.shieldWave);addFloat(px,py-20,'RELIC SHIELD +'+relics.shieldWave,'#60a5fa',1.1);}legendPulse();hideOv();paused=false;startBGM();spawnWave(wave);raf=requestAnimationFrame(loop);}
 
 // ── Shop ──
 function showShop(){
@@ -3544,7 +3683,7 @@ function showMenu(){
     '<div class="pt" style="color:#00ffe7;">BUBBLE WARS EX <span style="color:#ff2d55;font-size:.65em;">∞</span></div>'+
     '<div class="ps">面白さを超えてくれ・最強の面白さで限界を超えろ</div>'+
     '<div style="display:flex;justify-content:space-between;width:100%;font-size:8px;color:rgba(255,255,255,.28);">'+
-      '<span>💎 '+GEM+'</span><span>🏆 '+HISCORE.toLocaleString()+'</span><span>💀 '+TOTALKILLS+'kills</span></div>'+
+      '<span>💎 '+GEM+'</span><span>🏆 '+HISCORE.toLocaleString()+'</span><span>👑 RANK '+legendRank+'</span><span>💀 '+TOTALKILLS+'kills</span></div>'+
     '<div class="sp"></div>'+
     '<button class="btn c1" onclick="startSingle()"><span class="em">🚀</span>'+
       '<div><div>シングルプレイ</div><div style="font-size:7px;opacity:.3;margin-top:1px;">無限ウェーブ・ボス・ウェーブガチャ・レベルアップ</div></div></button>'+
@@ -3717,6 +3856,8 @@ function showResult(title,col){
     '<div class="rr"><span class="rl">最高COMBO</span><span class="rv">'+maxCombo+'x</span></div>'+
     '<div class="rr"><span class="rl">総撃破数</span><span class="rv">'+TOTALKILLS+'</span></div>'+
     '<div class="rr"><span class="rl">所持💎</span><span class="rv">'+GEM+'</span></div>'+
+    '<div class="rr"><span class="rl">LEGEND RANK</span><span class="rv">'+legendRank+'</span></div>'+
+    '<div class="rr"><span class="rl">RUN MISSION</span><span class="rv">'+legendRunCompleted+'/3</span></div>'+
     '<div class="sp"></div>'+
     '<div class="brow">'+
       '<button class="sb c" onclick="retryGame()">🔄 もう一回</button>'+
@@ -3728,7 +3869,7 @@ function showResult(title,col){
 function retryGame(){cancelAnimationFrame(raf);if(retryFn)retryFn();}
 
 // ── Init ──
-resize();showMenu();
+resize();renderLegendUI();showMenu();
 </script>
 </body>
 </html>
